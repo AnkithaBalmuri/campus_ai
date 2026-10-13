@@ -1,0 +1,6 @@
+import bcrypt from "bcryptjs";
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { db, ensureIndexes } from "@/lib/db";
+const schema = z.object({ username: z.string().trim().min(1).max(80), password: z.string().min(1).max(128), displayName: z.string().trim().min(1).max(80), role: z.enum(["student", "worker", "admin"]) });
+export async function POST(request: Request) { try { const input = schema.parse(await request.json()); await ensureIndexes(); const users = (await db()).collection("users"); const passwordHash = await bcrypt.hash(input.password, 12); await users.insertOne({ username: input.username, displayName: input.displayName, passwordHash, role: input.role, language: "en", createdAt: new Date(), updatedAt: new Date() }); return NextResponse.json({ ok: true }, { status: 201 }); } catch (error) { if (error instanceof z.ZodError) return NextResponse.json({ error: "Enter a name, username, and password." }, { status: 400 }); if (String(error).includes("E11000")) return NextResponse.json({ error: "That username is already in use." }, { status: 409 }); console.error("Registration failed", error); return NextResponse.json({ error: "Registration is unavailable. Check the database configuration." }, { status: 500 }); } }

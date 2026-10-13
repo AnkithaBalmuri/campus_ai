@@ -1,0 +1,6 @@
+"use client";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useLanguage } from "@/components/language-provider";
+type Notice = { _id: string; title: string; body: string; href: string; read: boolean; createdAt: string };
+export function NotificationsList() { const { t, language } = useLanguage(); const [items, setItems] = useState<Notice[]>([]); useEffect(() => { const load = () => fetch("/api/notifications").then((response) => response.ok ? response.json() : []).then(setItems); load(); const id = window.setInterval(load, 30000); return () => window.clearInterval(id); }, []); return <div className="card mt-6 divide-y">{items.length ? items.map((notice) => <Link onClick={() => fetch(`/api/notifications/${notice._id}/read`, { method: "PATCH" })} className={`block py-4 ${notice.read ? "opacity-60" : ""}`} key={notice._id} href={notice.href}><b>{notice.title}</b><p className="mt-1 text-sm text-muted">{notice.body}</p><time className="mt-1 block text-xs text-muted">{new Date(notice.createdAt).toLocaleString(language === "te" ? "te-IN" : language === "hi" ? "hi-IN" : "en-IN")}</time></Link>) : <p className="py-8 text-muted">{t("noNotifications")}</p>}</div>; }

@@ -1,0 +1,4 @@
+import { AppShell } from "@/components/app-shell";
+import { requireUser } from "@/lib/auth";
+import { T } from "@/components/language-provider";
+export default async function Page() { const user = await requireUser(); return <AppShell role={user.role} name={user.displayName}><h1 className="text-3xl font-black"><T k="profile" /></h1><div className="card mt-6 max-w-lg"><dl className="space-y-4"><div><dt className="text-sm text-muted"><T k="name" /></dt><dd className="font-bold">{user.displayName}</dd></div><div><dt className="text-sm text-muted"><T k="username" /></dt><dd className="font-bold">{user.username}</dd></div><div><dt className="text-sm text-muted"><T k="portalRole" /></dt><dd className="font-bold capitalize"><T k={user.role === "admin" ? "admin" : user.role} /></dd></div></dl></div></AppShell>; }

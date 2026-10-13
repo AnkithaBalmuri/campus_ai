@@ -1,0 +1,9 @@
+import { NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
+import { z } from "zod";
+import { currentUser } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { addHistory } from "@/lib/complaints";
+import { notifyUser } from "@/lib/notifications";
+const schema = z.object({ workerId: z.string().refine(ObjectId.isValid), department: z.string().min(1) });
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) { const admin = await currentUser(); if (!admin || admin.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 }); try { const input = schema.parse(await request.json()); const id = (await params).id; const database = await db(); const complaints = database.collection("complaints"); const complaint = await complaints.findOneAndUpdate({ _id: new ObjectId(id) }, { $set: { assignedWorkerId: input.workerId, department: input.department, status: "Assigned", updatedAt: new Date() } }, { returnDocument: "after" }); if (!complaint) return NextResponse.json({ error: "Complaint not found." }, { status: 404 }); await addHistory(id, "Assigned", admin._id!.toString(), `Assigned to ${input.department}`); await notifyUser(input.workerId, { title: `New assignment: ${complaint.reference}`, body: complaint.title, href: `/worker/assignments/${id}` }); await notifyUser(complaint.submittedBy, { title: `Your complaint ${complaint.reference} was assigned`, body: `Department: ${input.department}`, href: `/student/complaints/${id}` }); await database.collection("auditEvents").insertOne({ action: "complaint_assigned", complaintId: id, actorId: admin._id!.toString(), workerId: input.workerId, department: input.department, createdAt: new Date() }); return NextResponse.json({ ok: true }); } catch { return NextResponse.json({ error: "Valid worker and department are required." }, { status: 400 }); } }
