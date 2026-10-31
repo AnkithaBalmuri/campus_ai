@@ -1,8 +1,77 @@
 "use client";
+
 import { ImagePlus, Mic, MicOff, X } from "lucide-react";
 import { useRef, useState } from "react";
-import { languages } from "@/lib/i18n";
 import { useLanguage } from "@/components/language-provider";
-import type { Language } from "@/types";
+import { languages } from "@/lib/i18n";
+
 const categories = [["Academic", "academics"], ["Behavioral", "behavioral"], ["Infrastructure", "infrastructure"], ["Maintenance", "maintenance"], ["Safety", "safety"], ["Other", "other"]] as const;
-export function ComplaintForm({ role }: { role: "student" | "worker" }) { const { language, t } = useLanguage(); const [description, setDescription] = useState(""); const [attachments, setAttachments] = useState<{ url: string; publicId?: string; name: string }[]>([]); const [error, setError] = useState(""); const [busy, setBusy] = useState(false); const [recording, setRecording] = useState(false); const recognition = useRef<SpeechRecognition | null>(null); async function upload(file: File) { setError(""); const form = new FormData(); form.append("file", file); const res = await fetch("/api/upload", { method: "POST", body: form }); const data = await res.json(); if (!res.ok) throw new Error(data.error || t("uploadError")); setAttachments((current) => [...current, data]); } function toggleVoice() { if (recording) { recognition.current?.stop(); setRecording(false); return; } const BrowserRecognition = window.SpeechRecognition || window.webkitSpeechRecognition; if (!BrowserRecognition) { setError(t("unsupportedVoice")); return; } const instance = new BrowserRecognition(); instance.lang = language === "te" ? "te-IN" : language === "hi" ? "hi-IN" : "en-IN"; instance.continuous = true; instance.onresult = (event) => setDescription((current) => `${current} ${Array.from(event.results).map((result) => result[0].transcript).join(" ")}`.trim()); instance.onerror = () => { setError(t("microphoneError")); setRecording(false); }; instance.onend = () => setRecording(false); instance.start(); recognition.current = instance; setRecording(true); } async function submit(event: React.FormEvent<HTMLFormElement>) { event.preventDefault(); setBusy(true); setError(""); const payload = Object.fromEntries(new FormData(event.currentTarget)); try { const response = await fetch("/api/complaints", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, description, attachments }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error); window.location.assign(`/${role}/complaints/${data.id}`); } catch (caught) { setError(caught instanceof Error ? caught.message : t("submitError")); } finally { setBusy(false); } } return <form onSubmit={submit} className="card space-y-5"><div className="grid gap-5 md:grid-cols-2"><label className="label">{t("complaintTitle")}<input required name="title" className="input" placeholder={t("titlePlaceholder")} /></label><label className="label">{t("category")}<select required name="category" className="input"><option value="">{t("selectCategory")}</option>{categories.map(([value, key]) => <option key={value} value={value}>{t(key)}</option>)}</select></label></div><label className="label block">{t("detailedDescription")}<textarea required minLength={15} name="description" value={description} onChange={(event) => setDescription(event.target.value)} className="input min-h-36 resize-y" placeholder={t("descriptionPlaceholder")} /></label><div className="grid gap-5 md:grid-cols-3"><label className="label">{t("location")}<input required name="location" className="input" placeholder={t("locationPlaceholder")} /></label><label className="label">{t("department")}<select name="department" className="input"><option value="">{t("notSure")}</option><option>Maintenance</option><option>Academic Affairs</option><option>Student Welfare</option><option>IT Services</option><option>Security</option></select></label><label className="label">{t("severity")}<select required name="severity" className="input"><option value="Low">{t("low")}</option><option value="Medium">{t("medium")}</option><option value="High">{t("high")}</option><option value="Critical">{t("critical")}</option></select></label></div><div className="grid gap-5 md:grid-cols-2"><label className="label">{t("preferredLanguage")}<select name="preferredLanguage" className="input" value={language} onChange={() => {}}>{Object.entries(languages).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><div><p className="label">{t("voiceInput")}</p><button type="button" onClick={toggleVoice} className={recording ? "btn-pink mt-1" : "btn-soft mt-1"}>{recording ? <MicOff size={17} /> : <Mic size={17} />}{recording ? t("stopListening") : t("startVoice")}</button><p className="mt-1 text-xs text-muted">{t("voiceHelp")}</p></div></div><div><p className="label">{t("imageEvidence")}</p><label className="btn-soft mt-1 cursor-pointer"><ImagePlus size={17} />{t("addImage")}<input className="hidden" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (file) upload(file).catch((caught) => setError(caught.message)); }} /></label><div className="mt-3 flex flex-wrap gap-3">{attachments.map((attachment, index) => <div key={attachment.url} className="relative"><img className="h-20 w-20 rounded-xl object-cover" src={attachment.url} alt={attachment.name} /><button type="button" aria-label={t("removeImage")} onClick={() => setAttachments((items) => items.filter((_, itemIndex) => itemIndex !== index))} className="absolute -right-2 -top-2 rounded-full bg-ink p-1 text-white"><X size={13} /></button></div>)}</div></div>{error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}<button disabled={busy} className="btn-primary">{busy ? t("submitting") : t("submitComplaint")}</button></form>; }
+
+export function ComplaintForm({ role }: { role: "student" | "worker" }) {
+  const { language, t } = useLanguage();
+  const [description, setDescription] = useState("");
+  const [attachments, setAttachments] = useState<{ url: string; publicId?: string; name: string }[]>([]);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const recognition = useRef<SpeechRecognition | null>(null);
+
+  async function upload(file: File) {
+    setError("");
+    const form = new FormData();
+    form.append("file", file);
+    const response = await fetch("/api/upload", { method: "POST", body: form });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || t("uploadError"));
+    setAttachments((current) => [...current, data]);
+  }
+
+  function toggleVoice() {
+    if (recording) { recognition.current?.stop(); setRecording(false); return; }
+    const BrowserRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!BrowserRecognition) { setError(t("unsupportedVoice")); return; }
+    const instance = new BrowserRecognition();
+    instance.lang = language === "te" ? "te-IN" : language === "hi" ? "hi-IN" : "en-IN";
+    instance.continuous = true;
+    instance.onresult = (event) => setDescription((current) => `${current} ${Array.from(event.results).map((result) => result[0].transcript).join(" ")}`.trim());
+    instance.onerror = () => { setError(t("microphoneError")); setRecording(false); };
+    instance.onend = () => setRecording(false);
+    instance.start();
+    recognition.current = instance;
+    setRecording(true);
+  }
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true); setError("");
+    const payload = Object.fromEntries(new FormData(event.currentTarget));
+    try {
+      const response = await fetch("/api/complaints", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, description, attachments }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      window.location.assign(`/${role}/complaints/${data.id}?submitted=1`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t("submitError"));
+    } finally { setBusy(false); }
+  }
+
+  return <form onSubmit={submit} className="card space-y-5">
+    <div className="grid gap-5 md:grid-cols-2">
+      <label className="label">{t("complaintTitle")}<input required name="title" className="input" placeholder={t("titlePlaceholder")} /></label>
+      <label className="label">{t("category")}<select required name="category" className="input"><option value="">{t("selectCategory")}</option>{categories.map(([value, key]) => <option key={value} value={value}>{t(key)}</option>)}</select></label>
+    </div>
+    <label className="label block">{t("detailedDescription")}<textarea required minLength={15} name="description" value={description} onChange={(event) => setDescription(event.target.value)} className="input min-h-36 resize-y" placeholder={t("descriptionPlaceholder")} /></label>
+    <div className="grid gap-5 md:grid-cols-3">
+      <label className="label">{t("location")}<input required name="location" className="input" placeholder={t("locationPlaceholder")} /></label>
+      <label className="label">{t("department")}<select name="department" className="input"><option value="">{t("notSure")}</option><option>Maintenance</option><option>Academic Affairs</option><option>Student Welfare</option><option>IT Services</option><option>Security</option></select></label>
+      <label className="label">{t("severity")}<select required name="severity" className="input"><option value="Low">{t("low")}</option><option value="Medium">{t("medium")}</option><option value="High">{t("high")}</option><option value="Critical">{t("critical")}</option></select></label>
+    </div>
+    <div className="grid gap-5 md:grid-cols-2">
+      <label className="label">{t("preferredLanguage")}<select name="preferredLanguage" className="input" value={language} onChange={() => {}}>{Object.entries(languages).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+      <div><p className="label">{t("voiceInput")}</p><button type="button" onClick={toggleVoice} className={recording ? "btn-pink mt-1" : "btn-soft mt-1"}>{recording ? <MicOff size={17} /> : <Mic size={17} />}{recording ? t("stopListening") : t("startVoice")}</button><p className="mt-1 text-xs text-muted">{t("voiceHelp")}</p></div>
+    </div>
+    <div><p className="label">{t("imageEvidence")}</p><label className="btn-soft mt-1 cursor-pointer"><ImagePlus size={17} />{t("addImage")}<input className="hidden" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (file) upload(file).catch((caught) => setError(caught.message)); }} /></label><div className="mt-3 flex flex-wrap gap-3">{attachments.map((attachment, index) => <div key={attachment.url} className="relative"><img className="h-20 w-20 rounded-xl object-cover" src={attachment.url} alt={attachment.name} /><button type="button" aria-label={t("removeImage")} onClick={() => setAttachments((items) => items.filter((_, itemIndex) => itemIndex !== index))} className="absolute -right-2 -top-2 rounded-full bg-ink p-1 text-white"><X size={13} /></button></div>)}</div></div>
+    {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+    <button disabled={busy} className="btn-primary">{busy ? t("submitting") : t("submitComplaint")}</button>
+  </form>;
+}
